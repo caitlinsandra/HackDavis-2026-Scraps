@@ -1,11 +1,15 @@
 "use client";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Ingredient, UrgencyLevel } from "./types";
 import { getDaysLeft, getUrgency, parseAddBatchCount } from "./ingredientUtils";
 import { pressDark, pressOutline } from "./pressableStyles";
+import {
+  DetectedIngredient,
+  fetchDetectedIngredients,
+} from "./fetchDetectedIngredients";
 
 interface AddIngredientProps {
-  onAdd: (ingredient: Ingredient) => void;
+  onAdd: (ingredient: Ingredient, options?: { stayOnAddTab?: boolean }) => void;
 }
 
 const EMOJI_MAP: Record<string, string> = {
@@ -47,6 +51,12 @@ export default function AddIngredient({ onAdd }: AddIngredientProps) {
   const [estimatedValue, setEstimatedValue] = useState("");
   const [success, setSuccess] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewItems, setReviewItems] = useState<
+    Array<{ id: string; name: string; count: number }>
+  >([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleAdd = () => {
     if (!name || !expiryDate) return;
@@ -74,19 +84,86 @@ export default function AddIngredient({ onAdd }: AddIngredientProps) {
     setTimeout(() => setSuccess(false), 2000);
   };
 
-  const handleSimulateScan = () => {
+  const estimateShelfLifeDays = (itemName: string): number => {
+    const n = itemName.toLowerCase();
+    if (n.includes("banana") || n.includes("berry")) return 3;
+    if (n.includes("spinach") || n.includes("lettuce")) return 4;
+    if (n.includes("tomato") || n.includes("avocado")) return 5;
+    if (n.includes("apple") || n.includes("orange")) return 10;
+    if (n.includes("onion") || n.includes("potato")) return 14;
+    return 7;
+  };
+
+  const buildIngredientFromDetected = (item: DetectedIngredient): Ingredient => {
+    const days = estimateShelfLifeDays(item.name);
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + days);
+    const expiryIso = expiry.toISOString().split("T")[0];
+    const urgency = getUrgency(getDaysLeft(expiryIso));
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: item.name,
+      quantity: String(item.count),
+      unit: "count",
+      count: Math.max(1, item.count),
+      expiryDate: expiryIso,
+      daysLeft: getDaysLeft(expiryIso),
+      urgency,
+      estimatedValue: Number((Math.max(1, item.count) * 1.5).toFixed(2)),
+      emoji: getEmoji(item.name),
+      isShared: urgency === "red",
+      autoShared: urgency === "red",
+    };
+  };
+
+  const toBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const raw = String(reader.result ?? "");
+        const b64 = raw.includes(",") ? raw.split(",")[1] : raw;
+        resolve(b64);
+      };
+      reader.onerror = () => reject(reader.error ?? new Error("Unable to read image"));
+      reader.readAsDataURL(file);
+    });
+
+  const handleScanUpload = async (file: File) => {
+    setScanError("");
     setScanning(true);
-    setTimeout(() => {
+    try {
+      const imageBase64 = await toBase64(file);
+      const detected = await fetchDetectedIngredients(imageBase64);
+      if (!detected.length) {
+        setScanError("No ingredients were detected. Try a clearer grocery photo.");
+        return;
+      }
+      setReviewItems(
+        detected.map((d, idx) => ({
+          id: `${Date.now()}-${idx}`,
+          name: d.name,
+          count: Math.max(1, d.count),
+        }))
+      );
+      setReviewOpen(true);
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : "Scan failed.");
+    } finally {
       setScanning(false);
-      setTab("manual");
-      setName("Baby Spinach");
-      setQuantity("5");
-      setUnit("oz");
-      const d = new Date();
-      d.setDate(d.getDate() + 2);
-      setExpiryDate(d.toISOString().split("T")[0]);
-      setEstimatedValue("3.50");
-    }, 1800);
+    }
+  };
+
+  const saveReviewedItems = () => {
+    const cleaned = reviewItems
+      .map((x) => ({ ...x, name: x.name.trim(), count: Math.max(1, Math.floor(x.count || 1)) }))
+      .filter((x) => x.name.length > 0);
+    for (const item of cleaned) {
+      onAdd(buildIngredientFromDetected(item), { stayOnAddTab: true });
+    }
+    setReviewOpen(false);
+    setReviewItems([]);
+    setSuccess(true);
+    setTimeout(() => setSuccess(false), 2000);
   };
 
   const inputClass =
@@ -119,22 +196,36 @@ export default function AddIngredient({ onAdd }: AddIngredientProps) {
                   <path d="M9 6l1.5-2h3L15 6" />
                 </svg>
                 <p className="text-[13px] text-stone-500 text-center px-6 leading-relaxed">
-                  Point at your fridge,
+                  Upload a grocery photo to
                   <br />
-                  pantry, or receipt.
+                  detect ingredients.
                 </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      void handleScanUpload(file);
+                    }
+                    e.currentTarget.value = "";
+                  }}
+                />
                 <button
                   type="button"
-                  onClick={handleSimulateScan}
+                  onClick={() => fileInputRef.current?.click()}
                   className={`bg-stone-900 text-white px-6 py-2.5 rounded-full text-[13px] font-medium ${pressDark}`}
                 >
-                  Simulate scan
+                  Choose photo
                 </button>
+                {scanError && <p className="text-[12px] text-red-600 px-6 text-center">{scanError}</p>}
               </>
             )}
           </div>
           <p className="text-[12px] text-stone-500 leading-relaxed text-center px-4">
-            AI identifies your ingredient and suggests a typical shelf life. You confirm before saving.
+            Scan results open in a review screen where you can edit counts and names before saving.
           </p>
         </div>
       ) : (
@@ -224,8 +315,8 @@ export default function AddIngredient({ onAdd }: AddIngredientProps) {
             <label className="text-[10px] uppercase tracking-[0.15em] text-stone-400 font-medium">
               Estimated value
             </label>
-            <div className="relative">
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 text-[15px] text-stone-400 pt-3">
+            <div className="relative flex items-center">
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 text-[15px] text-stone-400">
                 $
               </span>
               <input
@@ -234,7 +325,7 @@ export default function AddIngredient({ onAdd }: AddIngredientProps) {
                 onChange={(e) => setEstimatedValue(e.target.value)}
                 placeholder="0.00"
                 step="0.01"
-                className={`${inputClass} pl-4`}
+                className={`${inputClass} pl-4 tabular-nums`}
               />
             </div>
           </div>
@@ -248,6 +339,67 @@ export default function AddIngredient({ onAdd }: AddIngredientProps) {
           >
             {success ? "Added ✓" : "Add to pantry"}
           </button>
+        </div>
+      )}
+
+      {reviewOpen && (
+        <div className="fixed inset-0 z-[121] flex items-end justify-center bg-stone-900/40">
+          <button type="button" className="absolute inset-0" onClick={() => setReviewOpen(false)} aria-label="Close review" />
+          <div className="relative z-10 w-full max-w-sm bg-white rounded-t-[28px] shadow-2xl px-6 pt-6 pb-8 max-h-[88vh] overflow-y-auto">
+            <h2 className="font-display text-[24px] text-stone-900">Review scanned items</h2>
+            <p className="text-[12px] text-stone-500 mt-1">Edit anything before adding to pantry.</p>
+            <div className="mt-4 flex flex-col gap-2">
+              {reviewItems.map((item) => (
+                <div key={item.id} className="grid grid-cols-[1fr_78px_32px] gap-2 items-center">
+                  <div className="relative">
+                    <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 w-[2px] h-5 bg-stone-900/80 animate-pulse" />
+                    <input
+                      type="text"
+                      value={item.name}
+                      onChange={(e) =>
+                        setReviewItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, name: e.target.value } : x)))
+                      }
+                      placeholder="Ingredient name"
+                      className="w-full border border-stone-300 rounded-xl pl-7 pr-3 py-2 text-[14px] text-stone-900 placeholder-stone-400 focus:outline-none focus:border-stone-900 caret-stone-900"
+                    />
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    value={item.count}
+                    onChange={(e) =>
+                      setReviewItems((prev) =>
+                        prev.map((x) => (x.id === item.id ? { ...x, count: Math.max(1, Number(e.target.value) || 1) } : x))
+                      )
+                    }
+                    className="border border-stone-300 rounded-xl px-2 py-2 text-[14px] text-stone-900 placeholder-stone-400 focus:outline-none focus:border-stone-900 caret-stone-900 text-center"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setReviewItems((prev) => prev.filter((x) => x.id !== item.id))}
+                    className={`h-9 rounded-lg border border-stone-300 text-stone-500 ${pressOutline}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setReviewItems((prev) => [
+                  ...prev,
+                  { id: `${Date.now()}-${Math.random()}`, name: "", count: 1 },
+                ])
+              }
+              className={`w-full mt-3 py-2.5 rounded-xl border border-stone-300 text-[13px] text-stone-700 ${pressOutline}`}
+            >
+              + Add missing item
+            </button>
+            <button type="button" onClick={saveReviewedItems} className={`w-full mt-3 py-3.5 rounded-full bg-stone-900 text-white text-[13px] font-medium ${pressDark}`}>
+              Save to pantry
+            </button>
+          </div>
         </div>
       )}
     </div>

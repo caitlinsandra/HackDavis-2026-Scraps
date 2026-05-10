@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import PantryDashboard from "./PantryDashboard";
 import AddIngredient from "./AddIngredient";
 import Recipes from "./Recipes";
@@ -87,10 +87,12 @@ function TabIcon({ id, active }: { id: Tab; active: boolean }) {
         </svg>
       );
     case "profile":
-      // Home
+      // Settings / more
       return (
         <svg {...common}>
-          <path d="M4 11 12 5l8 6v9h-5v-6H9v6H4v-9z" />
+          <path d="M5 7h14" />
+          <path d="M5 12h14" />
+          <path d="M5 17h14" />
         </svg>
       );
   }
@@ -106,6 +108,7 @@ export default function ScrapsApp() {
   const [exchangeRequests, setExchangeRequests] = useState<
     IngredientExchangeRequest[]
   >(mockExchangeRequests);
+  const [friendPosts, setFriendPosts] = useState(mockFriendPosts);
   const [notificationPrefs, setNotificationPrefs] =
     useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
     const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>("mi");
@@ -117,7 +120,12 @@ export default function ScrapsApp() {
       return `${name.toLowerCase()}-${expiryDate ?? "none"}`;
     };
     
-    const handleAddIngredient = (newIng: Ingredient) => {
+  const addRedirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleAddIngredient = (
+      newIng: Ingredient,
+      options?: { stayOnAddTab?: boolean }
+    ) => {
       setIngredients((prev) => {
         const key = ingredientMatchKey(newIng.name, newIng.expiryDate);
     
@@ -148,8 +156,78 @@ export default function ScrapsApp() {
         return updated.sort((a, b) => a.daysLeft - b.daysLeft);
       });
     
-      setTimeout(() => setActiveTab("pantry"), 1200);
+      if (addRedirectTimeoutRef.current) {
+        clearTimeout(addRedirectTimeoutRef.current);
+        addRedirectTimeoutRef.current = null;
+      }
+      if (!options?.stayOnAddTab) {
+        addRedirectTimeoutRef.current = setTimeout(() => setActiveTab("pantry"), 1200);
+      }
     };
+
+  const handleRecipeCookToggle = (recipeId: string, isCookedNow: boolean) => {
+    const recipe = mockRecipes.find((r) => r.id === recipeId);
+    if (!recipe) return;
+    setProfile((prev) => ({
+      ...prev,
+      mealsCooked: Math.max(0, prev.mealsCooked + (isCookedNow ? 1 : -1)),
+      savedThisMonth: Math.max(
+        0,
+        prev.savedThisMonth + (isCookedNow ? recipe.savingsEstimate : -recipe.savingsEstimate)
+      ),
+    }));
+    setIngredients((prev) => {
+      const next = [...prev];
+      for (const used of recipe.expiringIngredients) {
+        const idx = next.findIndex((ing) => ing.name.toLowerCase().includes(used.toLowerCase()));
+        if (idx < 0) continue;
+        const ing = next[idx];
+        const newCount = Math.max(0, ing.count + (isCookedNow ? -1 : 1));
+        if (newCount <= 0) {
+          next.splice(idx, 1);
+        } else {
+          next[idx] = {
+            ...ing,
+            count: newCount,
+            quantity: String(newCount),
+            estimatedValue: Number(
+              Math.max(0, ing.estimatedValue + (isCookedNow ? -ing.estimatedValue / Math.max(1, ing.count) : ing.estimatedValue / Math.max(1, ing.count))).toFixed(2)
+            ),
+          };
+        }
+      }
+      return next.sort((a, b) => a.daysLeft - b.daysLeft);
+    });
+  };
+
+  const handleRecipeRequestIngredient = (friendName: string, ingredientName: string) => {
+    const post = friendPosts.find(
+      (p) =>
+        p.friendName.toLowerCase().includes(friendName.toLowerCase()) &&
+        p.ingredientName.toLowerCase().includes(ingredientName.toLowerCase())
+    );
+    const reqId = `outgoing-recipe-${friendName}-${ingredientName}`.toLowerCase().replace(/\s+/g, "-");
+    setExchangeRequests((prev) => {
+      if (prev.some((r) => r.id === reqId)) return prev;
+      return [
+        ...prev,
+        {
+          id: reqId,
+          direction: "outgoing",
+          counterpartyName: friendName,
+          counterpartyInitials: friendName.split(/\s+/).map((x) => x[0]).join("").slice(0, 2).toUpperCase(),
+          ingredientName,
+          ingredientEmoji: post?.ingredientEmoji ?? "🥬",
+          quantity: post?.quantity ?? "1 count",
+          status: "pending",
+        },
+      ];
+    });
+    if (post) {
+      setFriendPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, requested: true } : p)));
+    }
+    setActiveTab("social");
+  };
 
   const handleRemoveIngredient = (id: string) => {
     setIngredients((prev) => prev.filter((ing) => ing.id !== id));
@@ -336,14 +414,19 @@ export default function ScrapsApp() {
               <AddIngredient onAdd={handleAddIngredient} />
             )}
             {activeTab === "recipes" && (
-              <Recipes recipes={mockRecipes} />
+              <Recipes
+                recipes={mockRecipes}
+                onRecipeCookToggle={handleRecipeCookToggle}
+                onRequestIngredient={handleRecipeRequestIngredient}
+              />
             )}
             {activeTab === "social" && (
               <Social
-                friendPosts={mockFriendPosts}
+                friendPosts={friendPosts}
                 mySharedIngredients={sharedIngredients}
                 exchangeRequests={exchangeRequests}
                 setExchangeRequests={setExchangeRequests}
+                setFriendPosts={setFriendPosts}
               />
             )}
             {activeTab === "profile" && (
@@ -360,7 +443,7 @@ export default function ScrapsApp() {
           </div>
 
           {/* Bottom nav — flat 5 tabs, monoline icons, hairline top border */}
-          <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-stone-100">
+          <div className="absolute bottom-0 left-0 right-0 z-30 bg-white border-t border-stone-100">
             <div className="flex items-center px-2 pt-2.5 pb-1">
               {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;

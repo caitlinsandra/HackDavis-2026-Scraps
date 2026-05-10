@@ -16,6 +16,7 @@ function outgoingRequestIdForFriendPost(postId: string): string {
 
 interface SocialProps {
   friendPosts: FriendPost[];
+  setFriendPosts: React.Dispatch<React.SetStateAction<FriendPost[]>>;
   mySharedIngredients: Ingredient[];
   exchangeRequests: IngredientExchangeRequest[];
   setExchangeRequests: React.Dispatch<
@@ -53,6 +54,7 @@ const statusStyle: Record<
 
 export default function Social({
   friendPosts,
+  setFriendPosts,
   mySharedIngredients,
   exchangeRequests,
   setExchangeRequests,
@@ -60,16 +62,27 @@ export default function Social({
   const [tab, setTab] = useState<"available" | "mine" | "requests">(
     "available"
   );
-  const [posts, setPosts] = useState(friendPosts);
+  const namesMatch = (a: string, b: string) =>
+    a.trim().toLowerCase() === b.trim().toLowerCase() ||
+    a.trim().toLowerCase().includes(b.trim().toLowerCase()) ||
+    b.trim().toLowerCase().includes(a.trim().toLowerCase());
+  const ingredientMatch = namesMatch;
+  const hasOutgoingRequestForPost = (post: FriendPost) =>
+    exchangeRequests.some(
+      (req) =>
+        req.direction === "outgoing" &&
+        ingredientMatch(req.ingredientName, post.ingredientName) &&
+        namesMatch(req.counterpartyName, post.friendName)
+    );
 
   const toggleRequest = (id: string) => {
-    const post = posts.find((p) => p.id === id);
+    const post = friendPosts.find((p) => p.id === id);
     if (!post) return;
 
     const nextRequested = !post.requested;
     const reqId = outgoingRequestIdForFriendPost(id);
 
-    setPosts((prev) =>
+    setFriendPosts((prev) =>
       prev.map((p) =>
         p.id === id ? { ...p, requested: nextRequested } : p
       )
@@ -94,8 +107,9 @@ export default function Social({
     });
   };
 
-  const urgentPosts = posts.filter((p) => p.urgency === "red");
-  const otherPosts = posts.filter((p) => p.urgency !== "red");
+  const visiblePosts = friendPosts.filter((p) => !hasOutgoingRequestForPost(p));
+  const urgentPosts = visiblePosts.filter((p) => p.urgency === "red");
+  const otherPosts = visiblePosts.filter((p) => p.urgency !== "red");
 
   const outgoing = exchangeRequests.filter((r) => r.direction === "outgoing");
   const incoming = exchangeRequests.filter((r) => r.direction === "incoming");

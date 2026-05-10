@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  DetectCustomLabelsCommand,
   DetectLabelsCommand,
   RekognitionClient,
 } from "@aws-sdk/client-rekognition";

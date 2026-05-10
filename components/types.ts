@@ -67,6 +67,8 @@ export interface Recipe {
   wasteSavings?: number;
   /** Ordered cooking steps for the recipe detail view */
   steps: string[];
+  /** Optional meal photo from TheMealDB */
+  imageUrl?: string;
 }
 
 export interface FriendPost {

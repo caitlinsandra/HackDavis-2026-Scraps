@@ -75,6 +75,40 @@ export default function Social({
         namesMatch(req.counterpartyName, post.friendName)
     );
 
+  const norm = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const namesMatch = (a: string, b: string) => {
+    const na = norm(a);
+    const nb = norm(b);
+    return na === nb || na.startsWith(nb) || nb.startsWith(na);
+  };
+
+  const ingredientMatch = (a: string, b: string) => {
+    const na = norm(a);
+    const nb = norm(b);
+    return (
+      na === nb ||
+      na.includes(nb) ||
+      nb.includes(na) ||
+      na.split(" ").some((part) => part.length > 2 && nb.includes(part))
+    );
+  };
+
+  const hasOutgoingRequestForPost = (post: FriendPost) => {
+    return exchangeRequests.some(
+      (r) =>
+        r.direction === "outgoing" &&
+        r.status !== "declined" &&
+        namesMatch(r.counterpartyName, post.friendName) &&
+        ingredientMatch(r.ingredientName, post.ingredientName)
+    );
+  };
+
   const toggleRequest = (id: string) => {
     const post = friendPosts.find((p) => p.id === id);
     if (!post) return;
@@ -107,9 +141,21 @@ export default function Social({
     });
   };
 
+<<<<<<< HEAD
   const visiblePosts = friendPosts.filter((p) => !hasOutgoingRequestForPost(p));
   const urgentPosts = visiblePosts.filter((p) => p.urgency === "red");
   const otherPosts = visiblePosts.filter((p) => p.urgency !== "red");
+=======
+  const availablePosts = posts
+    .map((p) => ({
+      ...p,
+      requested: p.requested || hasOutgoingRequestForPost(p),
+    }))
+    .filter((p) => !p.requested);
+
+  const urgentPosts = availablePosts.filter((p) => p.urgency === "red");
+  const otherPosts = availablePosts.filter((p) => p.urgency !== "red");
+>>>>>>> aws
 
   const outgoing = exchangeRequests.filter((r) => r.direction === "outgoing");
   const incoming = exchangeRequests.filter((r) => r.direction === "incoming");
@@ -124,7 +170,7 @@ export default function Social({
     <div className="flex flex-col gap-7 px-6 pt-5 pb-2">
       <div>
         <h1 className="font-display text-[34px] leading-[1.1] tracking-[-0.01em] text-stone-900">
-          Friends.
+          Community Pantry.
         </h1>
         <p className="text-[13px] text-stone-500 mt-3">
           Claim what&apos;s expiring or share your surplus.

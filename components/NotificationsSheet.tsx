@@ -71,7 +71,11 @@ export default function NotificationsSheet({
           </p>
           {notifications.length === 0 ? (
             <p className="text-[13px] text-stone-500 text-center py-10 px-4 leading-relaxed">
+<<<<<<< HEAD
               Nothing here. Turn categories back on in Settings (Home tab),
+=======
+              Nothing here, turn categories back on in Settings (Home tab),
+>>>>>>> aws
               or you&apos;re all caught up.
             </p>
           ) : (

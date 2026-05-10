@@ -127,7 +127,7 @@ export default function Profile({
           Hi, {profile.name.split(" ")[0]}.
         </h1>
         <p className="text-[13px] text-stone-500 mt-3 leading-relaxed">
-          Your snapshot: savings, impact, and people you cook with.
+          Your snapshot, savings, impact, and people you cook with.
         </p>
       </div>
 
@@ -278,7 +278,7 @@ export default function Profile({
       {sheet === "settings" && (
         <SheetChrome title="Settings" onClose={() => setSheet(null)}>
           <p className="text-[12px] text-stone-500 leading-relaxed mb-5">
-            Notifications and units — everything else lives on your other tabs.
+            Notifications and units, everything else lives on your other tabs.
           </p>
 
           <p className="text-[11px] uppercase tracking-[0.12em] text-stone-400 font-medium mb-2">

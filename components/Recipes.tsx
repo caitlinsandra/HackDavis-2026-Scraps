@@ -11,6 +11,8 @@ import { findUseSource, isExpiringIngredient } from "./recipeIngredientMeta";
 
 interface RecipesProps {
   recipes: Recipe[];
+  onRecipeCookToggle?: (recipeId: string, isCookedNow: boolean) => void;
+  onRequestIngredient?: (friendName: string, ingredientName: string) => void;
 }
 
 const cardTints = [
@@ -52,14 +54,17 @@ const MATCH_OPTIONS: {
   { id: "pantry_only", label: "Uses only pantry items" },
   { id: "missing_1", label: "Missing 1 ingredient" },
   { id: "missing_2", label: "Missing 2 ingredients" },
-  { id: "friends_expiring", label: "Uses friends expiring items" },
+  { id: "missing_3", label: "Missing 3 ingredients" },
+  { id: "missing_4_plus", label: "Missing 4+ ingredients" },
 ];
 
 function RecipeDetailSheet({
   recipe,
+  onRequestIngredient,
   onClose,
 }: {
   recipe: Recipe;
+  onRequestIngredient?: (friendName: string, ingredientName: string) => void;
   onClose: () => void;
 }) {
   const [requested, setRequested] = useState<Set<string>>(new Set());
@@ -114,7 +119,7 @@ function RecipeDetailSheet({
               Ingredients
             </h3>
             <ul className="flex flex-col gap-3">
-              {recipe.allIngredients.map((ing) => {
+              {recipe.allIngredients.map((ing, ingIdx) => {
                 const exp = isExpiringIngredient(recipe, ing);
                 const src = findUseSource(recipe, ing);
                 const rk =
@@ -125,7 +130,7 @@ function RecipeDetailSheet({
 
                 return (
                   <li
-                    key={ing}
+                    key={`${recipe.id}-${ingIdx}-${ing}`}
                     className="border border-stone-100 rounded-xl px-3 py-2.5 bg-stone-50/50"
                   >
                     <div className="flex items-start gap-2">
@@ -152,9 +157,10 @@ function RecipeDetailSheet({
                             </p>
                             <button
                               type="button"
-                              onClick={() =>
-                                toggleRequest(src.friendName!, ing)
-                              }
+                              onClick={() => {
+                                toggleRequest(src.friendName!, ing);
+                                onRequestIngredient?.(src.friendName!, ing);
+                              }}
                               className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${
                                 didRequest
                                   ? `bg-stone-100 text-stone-600 border-stone-300 ${pressOutline}`
@@ -233,7 +239,11 @@ function recipePassesFilters(
   return true;
 }
 
-export default function Recipes({ recipes }: RecipesProps) {
+export default function Recipes({
+  recipes,
+  onRecipeCookToggle,
+  onRequestIngredient,
+}: RecipesProps) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [dietary, setDietary] = useState<Set<DietaryTag>>(new Set());
   const [timeId, setTimeId] = useState<string | null>(null);
@@ -623,22 +633,17 @@ export default function Recipes({ recipes }: RecipesProps) {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5 pointer-events-none">
-                    {recipe.allIngredients.map((ing) => {
-                      const isExpiring =
-                        recipe.expiringIngredients.includes(ing);
-                      return (
-                        <span
-                          key={ing}
-                          className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-stone-200 text-stone-700 inline-flex items-center gap-1.5"
-                        >
-                          {isExpiring && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                          )}
-                          {ing}
-                        </span>
-                      );
-                    })}
+                  <div className="flex items-center gap-2 text-[12px] text-stone-600 mt-1 pointer-events-none">
+                    <span>{recipe.expiringIngredients.length} urgent items</span>
+                    <span className="text-stone-300">·</span>
+                    <span>
+                      Missing{" "}
+                      {Math.max(
+                        0,
+                        recipe.allIngredients.length -
+                          recipe.expiringIngredients.length
+                      )}
+                    </span>
                   </div>
                 </button>
                 <button
@@ -668,9 +673,14 @@ export default function Recipes({ recipes }: RecipesProps) {
                 type="button"
                 onClick={() => {
                   const next = new Set(cooked);
+                  let nextCooked = false;
                   if (isCookedNow) next.delete(recipe.id);
-                  else next.add(recipe.id);
+                  else {
+                    next.add(recipe.id);
+                    nextCooked = true;
+                  }
                   setCooked(next);
+                  onRecipeCookToggle?.(recipe.id, nextCooked);
                 }}
                 className={`w-full py-3.5 rounded-full text-[13px] font-medium tracking-wide mt-1 ${
                   isCookedNow
@@ -678,7 +688,7 @@ export default function Recipes({ recipes }: RecipesProps) {
                     : `bg-stone-900 text-white ${pressDark}`
                 }`}
               >
-                {isCookedNow ? "Marked as cooked ✓" : "Cook this tonight"}
+                {isCookedNow ? "Marked as cooked ✓" : "Mark as cooked"}
               </button>
             </div>
           );
@@ -688,6 +698,7 @@ export default function Recipes({ recipes }: RecipesProps) {
       {detailRecipe && (
         <RecipeDetailSheet
           recipe={detailRecipe}
+          onRequestIngredient={onRequestIngredient}
           onClose={() => setDetailRecipe(null)}
         />
       )}

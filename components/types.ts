@@ -36,7 +36,8 @@ export type IngredientMatchKind =
   | "pantry_only"
   | "missing_1"
   | "missing_2"
-  | "friends_expiring";
+  | "missing_3"
+  | "missing_4_plus";
 
 export interface RecipeUsesSource {
   ingredientLabel: string;
@@ -49,6 +50,7 @@ export interface Recipe {
   id: string;
   name: string;
   emoji: string;
+  imageUrl?: string;
   cookTime: string;
   /** Numeric minutes for filter buckets */
   cookTimeMinutes: number;

@@ -34,7 +34,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "recipes", label: "Cook" },
   { id: "add", label: "Add" },
   { id: "social", label: "Friends" },
-  { id: "profile", label: "Home" },
+  { id: "profile", label: "More" },
 ];
 
 // Monoline icons — 1.5 stroke, neutral, consistent geometry

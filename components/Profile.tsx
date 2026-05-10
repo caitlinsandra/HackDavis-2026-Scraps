@@ -127,7 +127,7 @@ export default function Profile({
           Hi, {profile.name.split(" ")[0]}.
         </h1>
         <p className="text-[13px] text-stone-500 mt-3 leading-relaxed">
-          Your snapshot — savings, impact, and people you cook with.
+          Your snapshot: savings, impact, and people you cook with.
         </p>
       </div>
 
